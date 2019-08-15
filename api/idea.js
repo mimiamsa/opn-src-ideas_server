@@ -7,22 +7,23 @@ const userModel = require("../models/user")
 
 // POST (create one idea): http://localhost:8888/api/idea
 router.post("/", (req, res) => {
+  console.log(req.body)
   ideaModel
     .create(req.body)
     .then(dbSuccess => {
-      res.status(200).json({ txt: "successfully created idea", dbSuccess });
+      // res.status(200).json({ txt: "successfully created idea", dbSuccess });
       userModel.findById(dbSuccess.creator)
         .then(user => {
           var userIdeas = user.myIdeas
           console.log("success on first call. user._id: ", user._id)
-          userModel.findByIdAndUpdate(user._id, { myIdeas: [...userIdeas, dbSuccess._id]})
-            .then(user => res.status(200).json({ user }))
+          userModel.findByIdAndUpdate(user._id, { $push: { myIdeas : dbSuccess._id}})
+            .then(user => res.status(200).json({txt: "successfully created idea ans updated user", user, dbSuccess }))
             .catch(dbErr => {
               console.log("------------------failed on update ----------------")
-              res.status(200).json(dbErr)
+              res.status(403).json(dbErr)
             })
         })
-        .catch(dbErr => res.status(200).json(dbErr))
+        .catch(dbErr => res.status(403).json(dbErr))
     })
     .catch(dbError => {
       res.status(500).json({ txt: "invalid server response", dbError });
@@ -38,35 +39,41 @@ router.post("/", (req, res) => {
 //   .find( {[queryKey] : queryValue})
 //   .populate("creator")
 //   .then(ideas => res.status(200).json({ideas}))
-//   .catch(dbErr => res.status(200).json(dbErr))
+//   .catch(dbErr => res.status(200).json(dbErr)))
 // })
 
 // GET route for filter/ sort
-router.get("/", (req,res) => {
-  // console.log("here's the req.query: ", req.query)
-  var filter = {}
-  req.query.tags ? filter = {'$match': {"tags": req.query.tags}} : filter = {'$match': {}}
-
-  var addFields = {'$addFields': {'netvotes': {'$add': ['$upvotes', '$downvotes']}}}
-
-  var sort = {}
-  req.query.sort ? sort = {"$sort": { [req.query.sort]: -1 }} : sort = {"$sort": { "upvotes" : -1 }}
-
-  ideaModel
-  .aggregate([filter, addFields, sort, {
-    '$lookup': {
-      'from': 'users', 
-      'localField': 'creator', 
-      'foreignField': '_id', 
-      'as': 'creator'
-    }
-  }, {
-    '$unwind': {
-      'path': '$creator'
-    }}])
-  .then(ideas => res.status(200).json({ideas}))
-  .catch(dbErr => res.status(200).json(dbErr))
+router.get("/", (req, res) => {
+  ideaModel.find()
+    .then(ideas => res.status(200).json({ ideas }))
+    .catch(dbErr => res.status(200).json(dbErr))
 })
+
+
+  // console.log("here's the req.query: ", req.query)
+  // var filter = {}
+  // req.query.tags ? filter = { '$match': { "tags": req.query.tags } } : filter = { '$match': {} }
+
+  // var addFields = { '$addFields': { 'netvotes': { '$add': ['$upvotes', '$downvotes'] } } }
+
+  // var sort = {}
+  // req.query.sort ? sort = { "$sort": { [req.query.sort]: -1 } } : sort = { "$sort": { "upvotes": -1 } }
+  // ideaModel
+  //   .aggregate([filter, addFields, sort, {
+  //     '$lookup': {
+  //       'from': 'users',
+  //       'localField': 'creator',
+  //       'foreignField': '_id',
+  //       'as': 'creator'
+  //     }
+  //   }, {
+  //       '$unwind': {
+  //         'path': '$creator'
+  //       }
+  //     }])
+  //   .then(ideas => res.status(200).json({ ideas }))
+  //   .catch(dbErr => res.status(200).json(dbErr))
+
 
 // GET (fetch one idea by id): http://localhost:8888/api/idea/1
 router.get("/:id", (req, res) => {
@@ -94,20 +101,20 @@ router.delete("/:id", (req, res) => {
     .then(idea => {
       res.status(200).json({ idea })
       userModel.findById(idea.creator)
-      .then( user => {
-        var userIdeas = user.myIdeas; 
-        console.log("userIdeas: ", userIdeas)
-
-        userModel.findByIdAndUpdate(user._id, {myIdeas: userIdeas.pull(idea._id)})
         .then(user => {
-          res.status(200).json({user});
-          console.log("success; deleted idea from user: ", user)
+          var userIdeas = user.myIdeas;
+          console.log("userIdeas: ", userIdeas)
+
+          userModel.findByIdAndUpdate(user._id, { myIdeas: userIdeas.pull(idea._id) })
+            .then(user => {
+              res.status(200).json({ user });
+              console.log("success; deleted idea from user: ", user)
+            })
+            .catch(dbErr => {
+              res.status(200).json(dbErr);
+              console.log("failed on findByIdAndUpdate")
+            })
         })
-        .catch(dbErr => {
-          res.status(200).json(dbErr);
-          console.log("failed on findByIdAndUpdate")
-        })
-      })
 
     })
     .catch(dbErr => res.status(200).json(dbErr))
@@ -129,32 +136,32 @@ router.put("/:id", (req, res) => {
     .catch(dbErr => res.status(200).json(dbErr))
 })
 
-router.put("/upvote/:id", (req,res) => {
-  // console.log("req.body: ", req.body)
-
+router.put("/upvote/:id", (req, res) => {
+const {loggedUser} = req.body
+console.log(loggedUser)
   ideaModel
-  .findByIdAndUpdate(req.params.id, req.body)
-  .then(idea => {
-    res.status(200).json({idea})
-    userModel.findById(req.body.loggedUser)
-    .then( user => {
-      var userUpvotes = user.upvotedIdeas; 
-
-      console.log("userUpvotes: ", userUpvotes)
-      userModel.findByIdAndUpdate(user._id, !userUpvotes.includes(idea._id) ? 
-      {upvotedIdeas: [...userUpvotes, idea._id]}
-      : {upvotedIdeas: userUpvotes.pull(idea._id)})
-      .then(user => {
-        res.status(200).json({user});
-        console.log("success; updated user: ", user)
-      })
-      .catch(dbErr => {
-        res.status(200).json(dbErr);
-        console.log("failed on findByIdAndUpdate")
-      })
+    .findByIdAndUpdate(req.params.id, {$push: {upvotedUsers: loggedUser.id}, $inc: { upvotes: 1}})
+    .then(idea => {
+      // res.status(200).json({ idea })
+      userModel.findById(loggedUser.id)
+        .then(user => {
+          console.log(user)
+          var userUpvotes = user.upvotedIdeas;
+          console.log("userUpvotes: ", userUpvotes)
+          userModel.findByIdAndUpdate(user._id, !userUpvotes.includes(idea._id) ?
+            { upvotedIdeas: [...userUpvotes, idea._id] }
+            : { upvotedIdeas: userUpvotes.pull(idea._id) })
+            .then(user => {
+              res.status(200).json({ user, idea });
+              console.log("success; updated user: ", user)
+            })
+            .catch(dbErr => {
+              res.status(200).json(dbErr);
+              console.log("failed on findByIdAndUpdate")
+            })
+        })
     })
-  })
-  .catch(dbErr => res.status(200).json(dbErr))
+    .catch(dbErr => res.status(200).json(dbErr))
 })
 
 //-----------------------------------------------------------------------------------

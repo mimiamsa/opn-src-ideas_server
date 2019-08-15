@@ -7,12 +7,14 @@ const commentModel = require("../models/comment")
 
 // post comments
 router.post("/", (req, res) => {
+  console.log(req.body)
   commentModel
     .create(req.body)
     .then(dbSuccess => {
       res.status(200).json({ txt: "successfully created comments", dbSuccess });
     })
     .catch(dbError => {
+      console.log(dbError)
       res.status(500).json({ txt: "invalid server response", dbError });
     })
 })

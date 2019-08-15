@@ -1,4 +1,4 @@
-// require("dotenv").config();
+require("dotenv").config();
 require("./config/mongoconfig");
 require('./config/passport');
 
@@ -25,15 +25,16 @@ app.use(cors({
 // AUTHENTICATION
 app.use(session({
   secret:"passport secret",
+  saveUninitialized: false,
   resave: true,
-  saveUninitialized: true
+  cookie: { secure: false, maxAge : (4 * 60 * 60 * 1000) }, // 4 hours
 }));
 
 app.use(passport.initialize());
 app.use(passport.session());
 
-const authRoutes = require('./api/auth-routes');
-app.use('/api', authRoutes);
+// const authRoutes = require('./api/auth-routes');
+// app.use('/api', authRoutes);
 
 //ROUTES PREFIXING-------------------------------------------------------------------
 app.use("/api/user", apiUser) //Associating sub routers
@@ -43,7 +44,6 @@ app.use("/api/comment", apiComment) //Associating sub routers
 app.get("/", (req,res) => {
   res.send("Hello Open Source Ideas!")
 })
-
 //LISTENER---------------------------------------------------------------------------
 const listener = app.listen(process.env.PORT, () => {
   console.log(`your app started at http://localhost:${listener.address().port}`)
